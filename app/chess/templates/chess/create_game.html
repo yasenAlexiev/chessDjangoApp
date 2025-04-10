@@ -1,0 +1,28 @@
+{% extends 'chess/base.html' %}
+
+{% block title %}Create New Game{% endblock %}
+
+{% block content %}
+    <h1>Create New Game</h1>
+    
+    {% if error %}
+        <div class="alert alert-danger">
+            {{ error }}
+        </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-md-6">
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="opponent" class="form-label">Opponent's Username</label>
+                    <input type="text" class="form-control" id="opponent" name="opponent" required>
+                    <div class="form-text">Enter the username of the player you want to play against.</div>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Game</button>
+                <a href="{% url 'chess:game_list' %}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+{% endblock %} 

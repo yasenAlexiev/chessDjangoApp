@@ -1,0 +1,159 @@
+{% extends 'chess/base.html' %}
+
+{% block title %}Game {{ game.id }}{% endblock %}
+
+{% block content %}
+    <h1>Game {{ game.id }}</h1>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        {% if game.white_player == user %}
+                            You (White) vs {{ game.black_player.username }} (Black)
+                        {% else %}
+                            {{ game.white_player.username }} (White) vs You (Black)
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="chess-board" class="chess-board mb-3"></div>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-{% if game.status == 'I' %}primary{% elif game.status == 'WW' or game.status == 'BW' %}success{% else %}warning{% endif %}">
+                                {% if game.status == 'P' %}
+                                    Pending
+                                {% elif game.status == 'I' %}
+                                    In Progress
+                                {% elif game.status == 'WW' %}
+                                    White Won
+                                {% elif game.status == 'BW' %}
+                                    Black Won
+                                {% else %}
+                                    Draw
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div>
+                            <a href="{% url 'chess:game_history' game.id %}" class="btn btn-outline-secondary btn-sm">
+                                View History
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Move History</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <div id="move-history">
+                        {% for move in moves %}
+                            <div class="move-entry">
+                                <strong>{{ move.move_number }}.</strong>
+                                {{ move.player.username }}: {{ move.move_notation }}
+                                <small class="text-muted">{{ move.created_at|time }}</small>
+                            </div>
+                        {% empty %}
+                            <p class="text-muted">No moves yet</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script>
+        const gameId = {{ game.id }};
+        const isWhite = {{ is_white|yesno:"true,false" }};
+        const initialFen = "{{ game.current_fen }}";
+        
+        // Initialize chess.js
+        const chess = new Chess(initialFen);
+        
+        // Function to update the board display
+        function updateBoard() {
+            const board = document.getElementById('chess-board');
+            board.innerHTML = '';
+            
+            // Create 8x8 grid
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    const square = document.createElement('div');
+                    square.className = `chess-square ${(i + j) % 2 === 0 ? 'white' : 'black'}`;
+                    square.dataset.square = String.fromCharCode(97 + j) + (8 - i);
+                    
+                    // Add piece if present
+                    const piece = chess.get(square.dataset.square);
+                    if (piece) {
+                        const pieceElement = document.createElement('span');
+                        pieceElement.textContent = getPieceSymbol(piece);
+                        square.appendChild(pieceElement);
+                    }
+                    
+                    board.appendChild(square);
+                }
+            }
+        }
+        
+        // Function to get Unicode chess piece symbol
+        function getPieceSymbol(piece) {
+            const symbols = {
+                'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
+                'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
+            };
+            return symbols[piece.type + piece.color];
+        }
+        
+        // Function to handle move submission
+        async function submitMove(move) {
+            try {
+                const response = await fetch(`/game/${gameId}/move/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: `move=${move}&fen=${chess.fen()}`
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    // Update move history
+                    const moveHistory = document.getElementById('move-history');
+                    const moveEntry = document.createElement('div');
+                    moveEntry.className = 'move-entry';
+                    moveEntry.innerHTML = `
+                        <strong>${data.move.id}.</strong>
+                        ${data.move.player}: ${data.move.notation}
+                        <small class="text-muted">${new Date(data.move.created_at).toLocaleTimeString()}</small>
+                    `;
+                    moveHistory.appendChild(moveEntry);
+                }
+            } catch (error) {
+                console.error('Error submitting move:', error);
+            }
+        }
+        
+        // Initialize the board
+        updateBoard();
+        
+        // Add click handlers for moves
+        document.getElementById('chess-board').addEventListener('click', (e) => {
+            const square = e.target.closest('.chess-square');
+            if (!square) return;
+            
+            // Handle move logic here
+            // This is a simplified version - you'll need to implement
+            // the full move selection and validation logic
+        });
+    </script>
+{% endblock %} 
