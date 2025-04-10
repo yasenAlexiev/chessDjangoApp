@@ -1,159 +1,213 @@
 {% extends 'chess/base.html' %}
+{% load static %}
 
 {% block title %}Game {{ game.id }}{% endblock %}
 
 {% block content %}
-    <h1>Game {{ game.id }}</h1>
-    
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        {% if game.white_player == user %}
-                            You (White) vs {{ game.black_player.username }} (Black)
-                        {% else %}
-                            {{ game.white_player.username }} (White) vs You (Black)
-                        {% endif %}
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="chess-board" class="chess-board mb-3"></div>
-                    
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="badge bg-{% if game.status == 'I' %}primary{% elif game.status == 'WW' or game.status == 'BW' %}success{% else %}warning{% endif %}">
-                                {% if game.status == 'P' %}
-                                    Pending
-                                {% elif game.status == 'I' %}
-                                    In Progress
-                                {% elif game.status == 'WW' %}
-                                    White Won
-                                {% elif game.status == 'BW' %}
-                                    Black Won
-                                {% else %}
-                                    Draw
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div>
-                            <a href="{% url 'chess:game_history' game.id %}" class="btn btn-outline-secondary btn-sm">
-                                View History
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Move History</h5>
-                </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    <div id="move-history">
-                        {% for move in moves %}
-                            <div class="move-entry">
-                                <strong>{{ move.move_number }}.</strong>
-                                {{ move.player.username }}: {{ move.move_notation }}
-                                <small class="text-muted">{{ move.created_at|time }}</small>
-                            </div>
-                        {% empty %}
-                            <p class="text-muted">No moves yet</p>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="container mt-4">
+        <h2>Game #{{ game.id }}</h2>
+        <div class="chess-board" id="chessBoard"></div>
     </div>
-{% endblock %}
 
-{% block extra_js %}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script>
-        const gameId = {{ game.id }};
-        const isWhite = {{ is_white|yesno:"true,false" }};
-        const initialFen = "{{ game.current_fen }}";
+        let selectedSquare = null;
+        let validMoves = [];
+        // Convert the board data to a JavaScript array
+        let board = JSON.parse('{{ board|safe }}');
+        console.log('Initial board state:', board);
         
-        // Initialize chess.js
-        const chess = new Chess(initialFen);
-        
-        // Function to update the board display
-        function updateBoard() {
-            const board = document.getElementById('chess-board');
-            board.innerHTML = '';
-            
-            // Create 8x8 grid
-            for (let i = 0; i < 8; i++) {
-                for (let j = 0; j < 8; j++) {
+        function initializeBoard() {
+            const chessBoard = document.getElementById('chessBoard');
+            chessBoard.innerHTML = '';
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
                     const square = document.createElement('div');
-                    square.className = `chess-square ${(i + j) % 2 === 0 ? 'white' : 'black'}`;
-                    square.dataset.square = String.fromCharCode(97 + j) + (8 - i);
+                    square.className = `chess-square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
                     
-                    // Add piece if present
-                    const piece = chess.get(square.dataset.square);
-                    if (piece) {
-                        const pieceElement = document.createElement('span');
-                        pieceElement.textContent = getPieceSymbol(piece);
-                        square.appendChild(pieceElement);
+                    const piece = board[row][col];
+                    console.log(`Square [${row}][${col}]:`, piece); // Debug log
+                    
+                    if (piece && typeof piece === 'string' && piece.length >= 2) {
+                        const img = document.createElement('img');
+                        img.src = getPieceImageUrl(piece);
+                        img.alt = piece;
+                        square.appendChild(img);
                     }
                     
-                    board.appendChild(square);
+                    square.addEventListener('click', handleSquareClick);
+                    chessBoard.appendChild(square);
                 }
             }
         }
-        
-        // Function to get Unicode chess piece symbol
-        function getPieceSymbol(piece) {
-            const symbols = {
-                'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
-                'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔'
-            };
-            return symbols[piece.type + piece.color];
-        }
-        
-        // Function to handle move submission
-        async function submitMove(move) {
+
+        function getPieceImageUrl(piece) {
             try {
-                const response = await fetch(`/game/${gameId}/move/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: `move=${move}&fen=${chess.fen()}`
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    // Update move history
-                    const moveHistory = document.getElementById('move-history');
-                    const moveEntry = document.createElement('div');
-                    moveEntry.className = 'move-entry';
-                    moveEntry.innerHTML = `
-                        <strong>${data.move.id}.</strong>
-                        ${data.move.player}: ${data.move.notation}
-                        <small class="text-muted">${new Date(data.move.created_at).toLocaleTimeString()}</small>
-                    `;
-                    moveHistory.appendChild(moveEntry);
+                if (!piece || typeof piece !== 'string' || piece.length < 2) {
+                    console.error('Invalid piece data:', piece);
+                    return '';
                 }
+
+                // Use the 2-letter format directly (e.g., 'wK.svg', 'bN.svg')
+                const url = `{% static 'chess/pieces/' %}${piece}.svg`;
+                console.log('Generated URL:', url); // Debug log
+                return url;
             } catch (error) {
-                console.error('Error submitting move:', error);
+                console.error('Error in getPieceImageUrl:', error);
+                return '';
             }
         }
-        
-        // Initialize the board
-        updateBoard();
-        
-        // Add click handlers for moves
-        document.getElementById('chess-board').addEventListener('click', (e) => {
-            const square = e.target.closest('.chess-square');
-            if (!square) return;
+
+        function handleSquareClick(event) {
+            const square = event.currentTarget;
+            const row = parseInt(square.dataset.row);
+            const col = parseInt(square.dataset.col);
+            const piece = board[row][col];
             
-            // Handle move logic here
-            // This is a simplified version - you'll need to implement
-            // the full move selection and validation logic
-        });
+            // Clear previous selection and highlights
+            document.querySelectorAll('.chess-square').forEach(sq => {
+                sq.classList.remove('selected', 'valid-move');
+            });
+            
+            if (selectedSquare) {
+                // If a square was already selected, attempt to make a move
+                const fromRow = parseInt(selectedSquare.dataset.row);
+                const fromCol = parseInt(selectedSquare.dataset.col);
+                
+                // Check if the move is valid
+                const isValidMove = validMoves.some(move => 
+                    move.toRow === row && move.toCol === col
+                );
+                
+                if (isValidMove) {
+                    // Make the move
+                    makeMove(fromRow, fromCol, row, col);
+                }
+                
+                selectedSquare = null;
+                validMoves = [];
+            } else if (piece) {
+                // If no square is selected and clicked square has a piece, select it
+                const isWhitePiece = piece[0] === 'w';
+                const isCurrentPlayerWhite = {{ is_white|yesno:"true,false" }};
+                
+                // Only allow selecting pieces of the current player's color
+                if ((isWhitePiece && isCurrentPlayerWhite) || (!isWhitePiece && !isCurrentPlayerWhite)) {
+                    selectedSquare = square;
+                    square.classList.add('selected');
+                    
+                    // Get valid moves for the selected piece
+                    validMoves = getValidMoves(fromRow, fromCol);
+                    
+                    // Highlight valid moves
+                    validMoves.forEach(move => {
+                        const targetSquare = document.querySelector(
+                            `.chess-square[data-row="${move.toRow}"][data-col="${move.toCol}"]`
+                        );
+                        if (targetSquare) {
+                            targetSquare.classList.add('valid-move');
+                        }
+                    });
+                }
+            }
+        }
+
+        function getValidMoves(fromRow, fromCol) {
+            const piece = board[fromRow][fromCol];
+            if (!piece) return [];
+            
+            const moves = [];
+            const pieceType = piece[1].toLowerCase();
+            const isWhite = piece[0] === 'w';
+            
+            // Basic movement patterns for each piece type
+            switch (pieceType) {
+                case 'p': // Pawn
+                    const direction = isWhite ? -1 : 1;
+                    const startRow = isWhite ? 6 : 1;
+                    
+                    // Forward move
+                    if (isValidSquare(fromRow + direction, fromCol) && !board[fromRow + direction][fromCol]) {
+                        moves.push({ toRow: fromRow + direction, toCol: fromCol });
+                        
+                        // Double move from starting position
+                        if (fromRow === startRow && !board[fromRow + 2 * direction][fromCol]) {
+                            moves.push({ toRow: fromRow + 2 * direction, toCol: fromCol });
+                        }
+                    }
+                    
+                    // Captures
+                    const captureCols = [fromCol - 1, fromCol + 1];
+                    captureCols.forEach(col => {
+                        if (isValidSquare(fromRow + direction, col)) {
+                            const targetPiece = board[fromRow + direction][col];
+                            if (targetPiece && targetPiece[0] !== piece[0]) {
+                                moves.push({ toRow: fromRow + direction, toCol: col });
+                            }
+                        }
+                    });
+                    break;
+                    
+                case 'n': // Knight
+                    const knightMoves = [
+                        [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                        [1, -2], [1, 2], [2, -1], [2, 1]
+                    ];
+                    knightMoves.forEach(([dRow, dCol]) => {
+                        const toRow = fromRow + dRow;
+                        const toCol = fromCol + dCol;
+                        if (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece || targetPiece[0] !== piece[0]) {
+                                moves.push({ toRow, toCol });
+                            }
+                        }
+                    });
+                    break;
+                    
+                // Add more piece movement patterns here
+                // For now, we'll just implement pawn and knight moves
+            }
+            
+            return moves;
+        }
+
+        function isValidSquare(row, col) {
+            return row >= 0 && row < 8 && col >= 0 && col < 8;
+        }
+
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            fetch(`/chess/game/${game.id}/move/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    from_row: fromRow,
+                    from_col: fromCol,
+                    to_row: toRow,
+                    to_col: toCol
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    board = data.board;
+                    initializeBoard();
+                } else {
+                    alert(data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while making the move.');
+            });
+        }
+
+        // Initialize the board when the page loads
+        document.addEventListener('DOMContentLoaded', initializeBoard);
     </script>
-{% endblock %} 
+{% endblock %}

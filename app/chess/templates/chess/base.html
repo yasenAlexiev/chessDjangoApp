@@ -13,18 +13,32 @@
             grid-template-columns: repeat(8, 1fr);
             grid-template-rows: repeat(8, 1fr);
             border: 2px solid #333;
+            user-select: none;
         }
         .chess-square {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2em;
+            position: relative;
+            cursor: pointer;
+        }
+        .chess-square img {
+            width: 80%;
+            height: 80%;
+            position: absolute;
+            pointer-events: none;
         }
         .white {
             background-color: #f0d9b5;
         }
         .black {
             background-color: #b58863;
+        }
+        .chess-square.selected {
+            background-color: #7fc97f;
+        }
+        .chess-square.valid-move {
+            background-color: #7fb5c9;
         }
     </style>
 </head>

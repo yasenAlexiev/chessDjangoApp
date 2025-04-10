@@ -5,6 +5,32 @@ from django.views.decorators.http import require_http_methods
 from .models import ChessGame, ChessMove
 from django.contrib.auth.models import User
 from django.db import models
+import json
+
+def fen_to_board(fen):
+    """Convert FEN string to board state"""
+    board = [[None for _ in range(8)] for _ in range(8)]
+    parts = fen.split()
+    position = parts[0]
+    
+    row = 0
+    col = 0
+    for char in position:
+        if char == '/':
+            row += 1
+            col = 0
+        elif char.isdigit():
+            col += int(char)
+        else:
+            # Convert the piece to the correct format (e.g., 'P' -> 'wP', 'p' -> 'bP')
+            if char.isupper():
+                piece = 'w' + char
+            else:
+                piece = 'b' + char.upper()
+            board[row][col] = piece
+            col += 1
+    
+    return board
 
 # Create your views here.
 
@@ -50,10 +76,18 @@ def play_game(request, game_id):
     # Get all moves for this game
     moves = game.moves.all().order_by('move_number')
     
+    # Convert FEN to board state
+    board = fen_to_board(game.current_fen)
+    print("Board state:", board)  # Debug print
+    
+    # Convert the board to a JSON-serializable format
+    board_json = json.dumps(board)
+    
     return render(request, 'chess/play_game.html', {
         'game': game,
         'moves': moves,
-        'is_white': request.user == game.white_player
+        'is_white': request.user == game.white_player,
+        'board': board_json
     })
 
 @login_required
