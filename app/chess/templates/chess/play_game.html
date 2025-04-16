@@ -56,7 +56,21 @@
         }
 
         .chess-square.valid-move {
-            background-color: rgba(0, 255, 0, 0.5); /* Highlight valid moves */
+            position: relative; /* Ensure the pseudo-element is positioned relative to the square */
+        }
+
+        .chess-square.valid-move::after {
+            content: ''; /* Add an empty content for the pseudo-element */
+            position: absolute;
+            top: 50%; /* Center the circle vertically */
+            left: 50%; /* Center the circle horizontally */
+            transform: translate(-50%, -50%); /* Adjust for the circle's size */
+            width: 30%; /* Adjust the size of the circle */
+            height: 30%; /* Adjust the size of the circle */
+            background-color: rgba(0, 255, 0, 0.5); /* Green color with transparency */
+            border-radius: 50%; /* Make it a circle */
+            pointer-events: none; /* Ensure the circle doesn't block interactions */
+            z-index: 20; /* Ensure the circle is above the square */
         }
 
         .list-group {
