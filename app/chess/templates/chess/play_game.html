@@ -115,11 +115,11 @@
     
             img.addEventListener('dragend', e => {
                 // Get the square where the piece was dropped
-                const dropTarget = document.querySelector('.valid-move'); // Find the first highlighted square
+                const dropTarget = document.elementFromPoint(e.clientX, e.clientY); // Find the first highlighted square
                 if (dropTarget) {
                     const toRow = parseInt(dropTarget.dataset.row);
                     const toCol = parseInt(dropTarget.dataset.col);
-            
+                    console.log(`Piece dropped on square: ${toRow}, ${toCol}`);
                     // Move the piece to the new square
                     const fromRow = parseInt(e.target.dataset.row);
                     const fromCol = parseInt(e.target.dataset.col);
