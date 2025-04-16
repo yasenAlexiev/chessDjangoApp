@@ -7,7 +7,17 @@
 
     <div class="container mt-4">
         <h2>Game #{{ game.id }}</h2>
-        <div class="chess-board" id="chessBoard"></div>
+        <div class="row">
+            <div class="col-md-8">
+                <div class="chess-board" id="chessBoard"></div>
+            </div>
+            <div class="col-md-4">
+                <h4>Game History</h4>
+                <ul id="gameHistory" class="list-group">
+                    <!-- Moves will be dynamically added here -->
+                </ul>
+            </div>
+        </div>
     </div>
 
     <style>
@@ -48,12 +58,30 @@
         .chess-square.valid-move {
             background-color: rgba(0, 255, 0, 0.5); /* Highlight valid moves */
         }
+
+        .list-group {
+            max-height: 644px;
+            overflow-y: auto;
+        }
+
+        .list-group-item {
+            font-size: 14px;
+        }
+
+        .list-group-item.bg-white {
+            background-color: #ffffff; /* White background */
+        }
+
+        .list-group-item.bg-light {
+            background-color:rgba(65, 72, 79, 0.5); /* Light gray background */
+        }
     </style>
 
     <script>
       
         const board = document.getElementById('chessBoard');
         let currentTurn = 'white'; // Track whose turn it is
+        let moveHistory = []; // Array to store the history of moves
 
         // Piece image URLs (using Wikipedia SVGs)
         const pieces = {
@@ -114,20 +142,43 @@
             });
     
             img.addEventListener('dragend', e => {
+                console.log("dragend triggered");
+
                 // Get the square where the piece was dropped
-                const dropTarget = document.elementFromPoint(e.clientX, e.clientY); // Find the first highlighted square
-                if (dropTarget) {
+                let dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+                // Traverse up the DOM tree to find the parent square
+                while (dropTarget && !dropTarget.classList.contains('chess-square')) {
+                    dropTarget = dropTarget.parentElement;
+                }
+
+                if (dropTarget && dropTarget.classList.contains('chess-square')) {
                     const toRow = parseInt(dropTarget.dataset.row);
                     const toCol = parseInt(dropTarget.dataset.col);
-                    console.log(`Piece dropped on square: ${toRow}, ${toCol}`);
+            
                     // Move the piece to the new square
                     const fromRow = parseInt(e.target.dataset.row);
                     const fromCol = parseInt(e.target.dataset.col);
             
                     if (isValidMove(fromRow, fromCol, toRow, toCol)) {
                         // Update boardState
-                        boardState[toRow][toCol] = boardState[fromRow][fromCol];
-                        boardState[fromRow][fromCol] = null;
+                        const piece = boardState[fromRow][fromCol];
+                        const targetPiece = boardState[toRow][toCol]; // Check if there's a piece at the target square
+            
+                        // Record the move in chess notation
+                        let move;
+                        if (targetPiece) {
+                            // Capture move
+                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}x${getChessNotationSquare(toRow, toCol)}`;
+                        } else {
+                            // Regular move
+                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}${getChessNotationSquare(toRow, toCol)}`;
+                        }
+            
+                        boardState[toRow][toCol] = piece; // Move the piece
+                        boardState[fromRow][fromCol] = null; // Clear the original square
+                        console.log("toRow", toRow, "toCol", toCol, "piece", piece);
+                        moveHistory.push(move);
+                        updateGameHistory();
             
                         // Switch turn
                         currentTurn = currentTurn === 'white' ? 'black' : 'white';
@@ -316,6 +367,35 @@
             }
         }
         
+        function updateGameHistory() {
+            const gameHistoryElement = document.getElementById('gameHistory');
+            gameHistoryElement.innerHTML = ''; // Clear the current history
+        
+            moveHistory.forEach((move, index) => {
+                const listItem = document.createElement('li');
+                listItem.className = `list-group-item ${index % 2 === 0 ? 'bg-white' : 'bg-light'}`; // Alternate row colors
+                listItem.textContent = `${index + 1}. ${move}`;
+                gameHistoryElement.appendChild(listItem);
+            });
+        }
+
+        function getChessNotation(type, fromRow, fromCol, toRow, toCol) {
+            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+            const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
+        
+            const pieceNotation = type === 'pawn' ? '' : type[0].toUpperCase(); // Use uppercase for pieces, no notation for pawns
+            const fromSquare = `${files[fromCol]}${ranks[fromRow]}`;
+            const toSquare = `${files[toCol]}${ranks[toRow]}`;
+        
+            return `${pieceNotation}${toSquare}`; // Example: Nf6, e4
+        }
+
+        function getChessNotationSquare(row, col) {
+            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+            const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
+            return `${files[col]}${ranks[row]}`;
+        }
+
         document.addEventListener('DOMContentLoaded', initializeBoard);
     </script>
 {% endblock %}
