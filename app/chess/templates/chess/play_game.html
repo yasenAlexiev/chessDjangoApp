@@ -73,7 +73,7 @@
         }
 
         .list-group-item.bg-light {
-            background-color:rgba(65, 72, 79, 0.5); /* Light gray background */
+            background-color:rgba(141, 89, 212, 0.5); /* Light gray background */
         }
     </style>
 
@@ -82,6 +82,9 @@
         const board = document.getElementById('chessBoard');
         let currentTurn = 'white'; // Track whose turn it is
         let moveHistory = []; // Array to store the history of moves
+        let selectedPiece = null; // To store the selected piece
+        let selectedFromRow = null;
+        let selectedFromCol = null;
 
         // Piece image URLs (using Wikipedia SVGs)
         const pieces = {
@@ -106,12 +109,53 @@
         // Create square
         function createSquare(row, col) {
             const square = document.createElement('div');
-            // Assign alternating colors based on row and column indices
             square.className = `chess-square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
             square.dataset.row = row;
             square.dataset.col = col;
 
             square.addEventListener('dragover', e => e.preventDefault());
+
+            // Add click event to handle moving the selected piece
+            square.addEventListener('click', e => {
+                if (selectedPiece) {
+                    const toRow = parseInt(square.dataset.row);
+                    const toCol = parseInt(square.dataset.col);
+
+                    if (isValidMove(selectedFromRow, selectedFromCol, toRow, toCol)) {
+                        // Update boardState
+                        const piece = boardState[selectedFromRow][selectedFromCol];
+                        const targetPiece = boardState[toRow][toCol]; // Check if there's a piece at the target square
+
+                        // Record the move in chess notation
+                        let move;
+                        if (targetPiece) {
+                            // Capture move
+                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}x${getChessNotationSquare(toRow, toCol)}`;
+                        } else {
+                            // Regular move
+                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}${getChessNotationSquare(toRow, toCol)}`;
+                        }
+
+                        boardState[toRow][toCol] = piece; // Move the piece
+                        boardState[selectedFromRow][selectedFromCol] = null; // Clear the original square
+
+                        moveHistory.push(move);
+                        updateGameHistory();
+
+                        // Switch turn
+                        currentTurn = currentTurn === 'white' ? 'black' : 'white';
+
+                        // Redraw the board
+                        renderBoard();
+
+                        // Clear selection
+                        selectedPiece = null;
+                        selectedFromRow = null;
+                        selectedFromCol = null;
+                        clearHighlights();
+                    }
+                }
+            });
 
             return square;
         }
@@ -139,6 +183,26 @@
                 const validMoves = getValidMoves(fromRow, fromCol, pieceColor, e.target.dataset.type);
                 highlightSquares(validMoves);
                 e.dataTransfer.setData('text/plain', e.target.id);
+            });
+
+            // Click event (same behavior as dragstart)
+            img.addEventListener('click', e => {
+                const pieceColor = e.target.dataset.color;
+                if (pieceColor !== currentTurn) {
+                    return;
+                }
+
+                const fromRow = parseInt(e.target.dataset.row);
+                const fromCol = parseInt(e.target.dataset.col);
+                const validMoves = getValidMoves(fromRow, fromCol, pieceColor, e.target.dataset.type);
+
+                // Highlight valid moves
+                highlightSquares(validMoves);
+
+                // Store the selected piece and its position
+                selectedPiece = e.target;
+                selectedFromRow = fromRow;
+                selectedFromCol = fromCol;
             });
     
             img.addEventListener('dragend', e => {
