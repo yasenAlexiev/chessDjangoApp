@@ -115,11 +115,14 @@ def play_game(request, game_id):
                     game.move_history = json.dumps(data['moveHistory'])
                 if 'currentTurn' in data:
                     game.current_turn = data['currentTurn']
+                if 'status' in data:
+                    game.status = data['status']
                 game.save()
                 return JsonResponse({
                     'success': True,
                     'message': 'Game state updated successfully',
-                    'currentTurn': game.current_turn
+                    'currentTurn': game.current_turn,
+                    'status': game.status
                 })
             else:
                 return JsonResponse({

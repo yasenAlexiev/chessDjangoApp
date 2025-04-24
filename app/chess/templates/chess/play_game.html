@@ -138,14 +138,21 @@
             } else if (piece) {
                 // If no square is selected and clicked square has a piece, select it
                 const isWhitePiece = piece[0] === 'w';
-                console.log('Piece check:', { isWhitePiece, currentTurn });
                 
+                // Check if it's the current player's turn
                 if ((isWhitePiece && currentTurn === 'white') || (!isWhitePiece && currentTurn === 'black')) {
                     selectedSquare = square;
                     square.classList.add('selected');
                     
                     // Get and highlight valid moves
                     validMoves = getValidMoves(row, col);
+                    
+                    // Check for checkmate if no valid moves and in check
+                    if (validMoves.length === 0 && isKingInCheck(isWhitePiece)) {
+                        endGame(isWhitePiece ? 'black' : 'white');
+                        return;
+                    }
+                    
                     validMoves.forEach(move => {
                         const targetSquare = document.querySelector(
                             `.chess-square[data-row="${move.toRow}"][data-col="${move.toCol}"]`
@@ -154,13 +161,11 @@
                             targetSquare.classList.add('valid-move');
                         }
                     });
-                } else {
-                    console.log('Move not allowed:', { isWhitePiece, currentTurn });
                 }
             }
         }
 
-        function getValidMoves(fromRow, fromCol) {
+        function getBasicMoves(fromRow, fromCol) {
             const piece = board[fromRow][fromCol];
             if (!piece) return [];
             
@@ -304,6 +309,117 @@
             return moves;
         }
 
+        function findThreateningPiece(isWhite) {
+            // Find the king's position
+            let kingRow = -1;
+            let kingCol = -1;
+            const kingPiece = isWhite ? 'wK' : 'bK';
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (board[row][col] === kingPiece) {
+                        kingRow = row;
+                        kingCol = col;
+                        break;
+                    }
+                }
+                if (kingRow !== -1) break;
+            }
+            
+            // Check all opponent pieces to find the one threatening the king
+            const opponentPieces = isWhite ? ['bP', 'bN', 'bB', 'bR', 'bQ'] : ['wP', 'wN', 'wB', 'wR', 'wQ'];
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece && opponentPieces.includes(piece)) {
+                        // Check if this piece can reach the king
+                        const pieceType = piece[1].toLowerCase();
+                        const dRow = kingRow - row;
+                        const dCol = kingCol - col;
+                        
+                        let canReach = false;
+                        
+                        switch (pieceType) {
+                            case 'p': // Pawn
+                                const direction = piece[0] === 'w' ? -1 : 1;
+                                canReach = Math.abs(dCol) === 1 && dRow === direction;
+                                break;
+                                
+                            case 'n': // Knight
+                                canReach = (Math.abs(dRow) === 2 && Math.abs(dCol) === 1) ||
+                                          (Math.abs(dRow) === 1 && Math.abs(dCol) === 2);
+                                break;
+                                
+                            case 'r': // Rook
+                                canReach = (dRow === 0 || dCol === 0) && !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                                
+                            case 'b': // Bishop
+                                canReach = Math.abs(dRow) === Math.abs(dCol) && !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                                
+                            case 'q': // Queen
+                                canReach = ((dRow === 0 || dCol === 0) || Math.abs(dRow) === Math.abs(dCol)) &&
+                                          !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                        }
+                        
+                        if (canReach) {
+                            return { row, col, piece };
+                        }
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        function isPathBlocked(fromRow, fromCol, toRow, toCol) {
+            const dRow = toRow - fromRow;
+            const dCol = toCol - fromCol;
+            const stepRow = dRow === 0 ? 0 : dRow / Math.abs(dRow);
+            const stepCol = dCol === 0 ? 0 : dCol / Math.abs(dCol);
+            
+            let currentRow = fromRow + stepRow;
+            let currentCol = fromCol + stepCol;
+            
+            while (currentRow !== toRow || currentCol !== toCol) {
+                if (board[currentRow][currentCol] !== null) {
+                    return true;
+                }
+                currentRow += stepRow;
+                currentCol += stepCol;
+            }
+            
+            return false;
+        }
+
+        function getValidMoves(fromRow, fromCol) {
+            const piece = board[fromRow][fromCol];
+            if (!piece) return [];
+            
+            const isWhite = piece[0] === 'w';
+            const moves = getBasicMoves(fromRow, fromCol);
+            
+            // Filter moves to prevent putting king in check
+            return moves.filter(move => {
+                // Make temporary move
+                const tempPiece = board[move.toRow][move.toCol];
+                board[move.toRow][move.toCol] = piece;
+                board[fromRow][fromCol] = null;
+                
+                // Check if king is in check
+                const inCheck = isKingInCheck(isWhite);
+                
+                // Undo move
+                board[fromRow][fromCol] = piece;
+                board[move.toRow][move.toCol] = tempPiece;
+                
+                return !inCheck;
+            });
+        }
+
         function isValidSquare(row, col) {
             return row >= 0 && row < 8 && col >= 0 && col < 8;
         }
@@ -350,15 +466,46 @@
                 if (kingRow !== -1) break;
             }
             
-            // Check if any opponent piece can capture the king
+            // Check all opponent pieces to find the one threatening the king
             const opponentPieces = isWhite ? ['bP', 'bN', 'bB', 'bR', 'bQ'] : ['wP', 'wN', 'wB', 'wR', 'wQ'];
             
             for (let row = 0; row < 8; row++) {
                 for (let col = 0; col < 8; col++) {
                     const piece = board[row][col];
                     if (piece && opponentPieces.includes(piece)) {
-                        const moves = getValidMoves(row, col);
-                        if (moves.some(move => move.toRow === kingRow && move.toCol === kingCol)) {
+                        // Check if this piece can reach the king
+                        const pieceType = piece[1].toLowerCase();
+                        const dRow = kingRow - row;
+                        const dCol = kingCol - col;
+                        
+                        let canReach = false;
+                        
+                        switch (pieceType) {
+                            case 'p': // Pawn
+                                const direction = piece[0] === 'w' ? -1 : 1;
+                                canReach = Math.abs(dCol) === 1 && dRow === direction;
+                                break;
+                                
+                            case 'n': // Knight
+                                canReach = (Math.abs(dRow) === 2 && Math.abs(dCol) === 1) ||
+                                          (Math.abs(dRow) === 1 && Math.abs(dCol) === 2);
+                                break;
+                                
+                            case 'r': // Rook
+                                canReach = (dRow === 0 || dCol === 0) && !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                                
+                            case 'b': // Bishop
+                                canReach = Math.abs(dRow) === Math.abs(dCol) && !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                                
+                            case 'q': // Queen
+                                canReach = ((dRow === 0 || dCol === 0) || Math.abs(dRow) === Math.abs(dCol)) &&
+                                          !isPathBlocked(row, col, kingRow, kingCol);
+                                break;
+                        }
+                        
+                        if (canReach) {
                             return true;
                         }
                     }
@@ -446,6 +593,88 @@
             return fen;
         }
 
+        function hasValidMoves(isWhite) {
+            // Check all pieces of the current color
+            const pieces = isWhite ? ['wP', 'wN', 'wB', 'wR', 'wQ', 'wK'] : ['bP', 'bN', 'bB', 'bR', 'bQ', 'bK'];
+            const validMoves = [];
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece && pieces.includes(piece)) {
+                        const moves = getValidMoves(row, col);
+                        // Try each move to see if it gets out of check or doesn't put king in check
+                        for (const move of moves) {
+                            // Make temporary move
+                            const tempPiece = board[move.toRow][move.toCol];
+                            board[move.toRow][move.toCol] = piece;
+                            board[row][col] = null;
+                            
+                            // Check if still in check
+                            const stillInCheck = isKingInCheck(isWhite);
+                            
+                            // Undo move
+                            board[row][col] = piece;
+                            board[move.toRow][move.toCol] = tempPiece;
+                            
+                            if (!stillInCheck) {
+                                validMoves.push({
+                                    fromRow: row,
+                                    fromCol: col,
+                                    toRow: move.toRow,
+                                    toCol: move.toCol
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return validMoves;
+        }
+
+        function isCheckmate(isWhite) {
+            return isKingInCheck(isWhite) && hasValidMoves(isWhite).length === 0;
+        }
+
+        function endGame(winner) {
+            const status = winner === 'white' ? 'WW' : 'BW';  // Use correct status codes from model
+            
+            // Update the game state
+            const gameState = {
+                currentFEN: boardToFEN(),
+                currentTurn: currentTurn,
+                moveHistory: moveHistory,
+                status: status
+            };
+            
+            // Update the database
+            fetch(`/game/${gameId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(gameState)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show checkmate message
+                    const message = winner === 'white' ? 'White wins by checkmate!' : 'Black wins by checkmate!';
+                    alert(message);
+                    // Disable further moves
+                    document.querySelectorAll('.chess-square').forEach(square => {
+                        square.style.pointerEvents = 'none';
+                    });
+                    // Redirect to game list after a short delay
+                    setTimeout(() => {
+                        window.location.href = '/game/list/';
+                    }, 2000);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
         function makeMove(fromRow, fromCol, toRow, toCol) {
             console.log('Making move:', { fromRow, fromCol, toRow, toCol, currentTurn });
             
@@ -469,10 +698,16 @@
             board[toRow][toCol] = piece;
             board[fromRow][fromCol] = null;
             
-            
             // Switch turn before sending to server
             currentTurn = currentTurn === 'white' ? 'black' : 'white';
             console.log('Turn switched to:', currentTurn);
+            
+            // Check for checkmate
+            const isWhiteTurn = currentTurn === 'white';
+            if (isCheckmate(!isWhiteTurn)) {
+                endGame(isWhiteTurn ? 'black' : 'white');
+                return;
+            }
             
             // Update the game state
             const gameState = {
