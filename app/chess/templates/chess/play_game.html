@@ -333,6 +333,33 @@
             return `${files[col]}${ranks[row]}`;
         }
 
+        function getChessNotation(fromRow, fromCol, toRow, toCol) {
+            const piece = board[toRow][toCol];
+            if (!piece) {
+                console.error('No piece found at', { fromRow, fromCol });
+                return '';
+            }
+            
+            const pieceType = piece[1].toLowerCase();
+            const toSquare = getChessNotationSquare(toRow, toCol);
+            
+            // For pawns, just show the destination square
+            if (pieceType === 'p') {
+                return toSquare;
+            }
+            
+            // For other pieces, show the piece symbol and destination square
+            const pieceSymbols = {
+                'k': 'K',
+                'q': 'Q',
+                'r': 'R',
+                'b': 'B',
+                'n': 'N'
+            };
+            
+            return `${pieceSymbols[pieceType]}${toSquare}`;
+        }
+
         function boardToFEN() {
             let fen = '';
             
@@ -388,8 +415,8 @@
             board[toRow][toCol] = piece;
             board[fromRow][fromCol] = null;
             
-            // Add move to history
-            const moveNotation = `${getChessNotationSquare(fromRow, fromCol)}${getChessNotationSquare(toRow, toCol)}`;
+            // Add move to history with proper chess notation
+            const moveNotation = getChessNotation(fromRow, fromCol, toRow, toCol);
             moveHistory.push(moveNotation);
             updateGameHistory();
             
