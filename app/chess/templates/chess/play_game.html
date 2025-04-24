@@ -238,6 +238,11 @@
             }
         }
 
+        function initializeGameHistory() {
+            console.log('Initializing game history:', moveHistory);
+            updateGameHistory();
+        }
+
         function getChessNotationSquare(row, col) {
             const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
             const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
@@ -343,6 +348,7 @@
         // Initialize the board and game history when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             initializeBoard();
+            initializeGameHistory();
         });
     </script>
 
