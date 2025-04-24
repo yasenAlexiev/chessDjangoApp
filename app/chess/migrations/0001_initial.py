@@ -67,41 +67,4 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-        ),
-        migrations.CreateModel(
-            name="ChessMove",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("move_number", models.PositiveIntegerField()),
-                ("move_notation", models.CharField(max_length=10)),
-                ("fen_after_move", models.CharField(max_length=100)),
-                ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
-                (
-                    "game",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="moves",
-                        to="chess.chessgame",
-                    ),
-                ),
-                (
-                    "player",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-            ],
-            options={
-                "ordering": ["game", "move_number"],
-            },
-        ),
-    ]
+        ),    ]

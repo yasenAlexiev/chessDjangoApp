@@ -12,14 +12,8 @@
                     {% for game in games %}
                         <a href="{% url 'chess:play_game' game.id %}" class="list-group-item list-group-item-action">
                             <div class="d-flex w-100 justify-content-between">
-                                <h5 class="mb-1">
-                                    {% if game.white_player == user %}
-                                        You (White) vs {{ game.black_player.username }} (Black)
-                                    {% else %}
-                                        {{ game.white_player.username }} (White) vs You (Black)
-                                    {% endif %}
-                                </h5>
-                                <small class="text-muted">{{ game.created_at|date:"M d, Y H:i" }}</small>
+                                <h5 class="mb-1">Game {{ game.id }}</h5>
+                                <small>{{ game.created_at }}</small>
                             </div>
                             <p class="mb-1">
                                 Status: 
@@ -35,14 +29,25 @@
                                     <span class="badge bg-secondary">Draw</span>
                                 {% endif %}
                             </p>
+                            <p>Moves:</p>
+                            <ul>
+                                {% for move in game.moves.all %}
+                                    <li>{{ move.move_number }}: {{ move.piece }} from {{ move.from_square }} to {{ move.to_square }}</li>
+                                {% endfor %}
+                            </ul>
                         </a>
                     {% endfor %}
                 </div>
             {% else %}
                 <div class="alert alert-info">
-                    You don't have any games yet. <a href="{% url 'chess:create_game' %}">Create a new game</a> to get started!
+                    You don't have any games yet. 
+                    <form action="{% url 'chess:create_game' %}" method="post" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="blackPlayerId" value="2"> <!-- Replace 2 with the actual black player ID -->
+                        <button type="submit" class="btn btn-primary">Create a new game</button>
+                    </form>
                 </div>
             {% endif %}
         </div>
     </div>
-{% endblock %} 
+{% endblock %}

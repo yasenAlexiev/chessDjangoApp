@@ -4,7 +4,6 @@
 {% block title %}Game {{ game.id }}{% endblock %}
 
 {% block content %}
-
     <div class="container mt-4">
         <h2>Game #{{ game.id }}</h2>
         <div class="row">
@@ -20,6 +19,333 @@
         </div>
     </div>
 
+    <script>
+        // Get the game ID from Django template
+        const gameId = {{ game.id }};
+        let currentTurn = '{{ game.current_turn }}'; // Initialize from server data
+        let moveHistory = JSON.parse('{{ move_history|safe }}'); // Initialize from server data
+        let selectedSquare = null;
+        let validMoves = [];
+        // Convert the board data to a JavaScript array
+        let board = JSON.parse('{{ board|safe }}');
+        console.log('Initial board state:', board);
+        console.log('Initial turn:', currentTurn);
+        
+        function initializeBoard() {
+            const chessBoard = document.getElementById('chessBoard');
+            chessBoard.innerHTML = '';
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = `chess-square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+                    
+                    const piece = board[row][col];
+                    
+                    if (piece && typeof piece === 'string' && piece.length >= 2) {
+                        const img = document.createElement('img');
+                        img.src = getPieceImageUrl(piece);
+                        img.alt = piece;
+                        img.draggable = true;
+                        img.addEventListener('dragstart', handleDragStart);
+                        img.addEventListener('dragend', handleDragEnd);
+                        square.appendChild(img);
+                    }
+                    
+                    square.addEventListener('dragover', handleDragOver);
+                    square.addEventListener('drop', handleDrop);
+                    square.addEventListener('click', handleSquareClick);
+                    chessBoard.appendChild(square);
+                }
+            }
+        }
+
+        function handleDragStart(event) {
+            const img = event.target;
+            const square = img.parentElement;
+            const row = parseInt(square.dataset.row);
+            const col = parseInt(square.dataset.col);
+            const piece = board[row][col];
+            
+            const isWhitePiece = piece[0] === 'w';
+            if ((isWhitePiece && currentTurn === 'white') || (!isWhitePiece && currentTurn === 'black')) {
+                event.dataTransfer.setData('text/plain', JSON.stringify({ row, col }));
+                img.classList.add('dragging');
+            } else {
+                event.preventDefault();
+            }
+        }
+
+        function handleDragEnd(event) {
+            event.target.classList.remove('dragging');
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const square = event.currentTarget;
+            const toRow = parseInt(square.dataset.row);
+            const toCol = parseInt(square.dataset.col);
+            
+            try {
+                const fromData = JSON.parse(event.dataTransfer.getData('text/plain'));
+                makeMove(fromData.row, fromData.col, toRow, toCol);
+            } catch (error) {
+                console.error('Error handling drop:', error);
+            }
+        }
+
+        function getPieceImageUrl(piece) {
+            try {
+                if (!piece || typeof piece !== 'string' || piece.length < 2) {
+                    console.error('Invalid piece data:', piece);
+                    return '';
+                }
+
+                // Use the 2-letter format directly (e.g., 'wK.svg', 'bN.svg')
+                const url = `{% static 'chess/pieces/' %}${piece}.svg`;
+                return url;
+            } catch (error) {
+                console.error('Error in getPieceImageUrl:', error);
+                return '';
+            }
+        }
+
+        function handleSquareClick(event) {
+            const square = event.currentTarget;
+            const row = parseInt(square.dataset.row);
+            const col = parseInt(square.dataset.col);
+            const piece = board[row][col];
+            
+            console.log('Square clicked:', { row, col, piece, currentTurn });
+            
+            // Clear previous selection and highlights
+            document.querySelectorAll('.chess-square').forEach(sq => {
+                sq.classList.remove('selected', 'valid-move');
+            });
+            
+            if (selectedSquare) {
+                // If a square was already selected, attempt to make a move
+                const fromRow = parseInt(selectedSquare.dataset.row);
+                const fromCol = parseInt(selectedSquare.dataset.col);
+                makeMove(fromRow, fromCol, row, col);
+                selectedSquare = null;
+            } else if (piece) {
+                // If no square is selected and clicked square has a piece, select it
+                const isWhitePiece = piece[0] === 'w';
+                console.log('Piece check:', { isWhitePiece, currentTurn });
+                
+                if ((isWhitePiece && currentTurn === 'white') || (!isWhitePiece && currentTurn === 'black')) {
+                    selectedSquare = square;
+                    square.classList.add('selected');
+                    
+                    // Get and highlight valid moves
+                    validMoves = getValidMoves(row, col);
+                    validMoves.forEach(move => {
+                        const targetSquare = document.querySelector(
+                            `.chess-square[data-row="${move.toRow}"][data-col="${move.toCol}"]`
+                        );
+                        if (targetSquare) {
+                            targetSquare.classList.add('valid-move');
+                        }
+                    });
+                } else {
+                    console.log('Move not allowed:', { isWhitePiece, currentTurn });
+                }
+            }
+        }
+
+        function getValidMoves(fromRow, fromCol) {
+            const piece = board[fromRow][fromCol];
+            if (!piece) return [];
+            
+            const moves = [];
+            const pieceType = piece[1].toLowerCase();
+            const isWhite = piece[0] === 'w';
+            
+            // Basic movement patterns for each piece type
+            switch (pieceType) {
+                case 'p': // Pawn
+                    const direction = isWhite ? -1 : 1;
+                    const startRow = isWhite ? 6 : 1;
+                    
+                    // Forward move
+                    if (isValidSquare(fromRow + direction, fromCol) && !board[fromRow + direction][fromCol]) {
+                        moves.push({ toRow: fromRow + direction, toCol: fromCol });
+                        
+                        // Double move from starting position
+                        if (fromRow === startRow && !board[fromRow + 2 * direction][fromCol]) {
+                            moves.push({ toRow: fromRow + 2 * direction, toCol: fromCol });
+                        }
+                    }
+                    
+                    // Captures
+                    const captureCols = [fromCol - 1, fromCol + 1];
+                    captureCols.forEach(col => {
+                        if (isValidSquare(fromRow + direction, col)) {
+                            const targetPiece = board[fromRow + direction][col];
+                            if (targetPiece && targetPiece[0] !== piece[0]) {
+                                moves.push({ toRow: fromRow + direction, toCol: col });
+                            }
+                        }
+                    });
+                    break;
+                    
+                case 'n': // Knight
+                    const knightMoves = [
+                        [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                        [1, -2], [1, 2], [2, -1], [2, 1]
+                    ];
+                    knightMoves.forEach(([dRow, dCol]) => {
+                        const toRow = fromRow + dRow;
+                        const toCol = fromCol + dCol;
+                        if (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece || targetPiece[0] !== piece[0]) {
+                                moves.push({ toRow, toCol });
+                            }
+                        }
+                    });
+                    break;
+                    
+                // Add more piece movement patterns here
+                // For now, we'll just implement pawn and knight moves
+            }
+            
+            return moves;
+        }
+
+        function isValidSquare(row, col) {
+            return row >= 0 && row < 8 && col >= 0 && col < 8;
+        }
+
+        function updateGameHistory() {
+            const gameHistoryElement = document.getElementById('gameHistory');
+            if (gameHistoryElement) {
+                gameHistoryElement.innerHTML = ''; // Clear the current history
+            
+                moveHistory.forEach((move, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = `list-group-item ${index % 2 === 0 ? 'bg-white' : 'bg-light'}`; // Alternate row colors
+                    listItem.textContent = `${index + 1}. ${move}`;
+                    gameHistoryElement.appendChild(listItem);
+                });
+            }
+        }
+
+        function getChessNotationSquare(row, col) {
+            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+            const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+            return `${files[col]}${ranks[row]}`;
+        }
+
+        function boardToFEN() {
+            let fen = '';
+            
+            for (let row = 0; row < 8; row++) {
+                let emptyCount = 0;
+                
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    
+                    if (!piece) {
+                        emptyCount++;
+                    } else {
+                        if (emptyCount > 0) {
+                            fen += emptyCount;
+                            emptyCount = 0;
+                        }
+                        // Convert piece to FEN format (e.g., 'wK' -> 'K', 'bP' -> 'p')
+                        const pieceChar = piece[1];
+                        fen += piece[0] === 'w' ? pieceChar.toUpperCase() : pieceChar.toLowerCase();
+                    }
+                }
+                
+                if (emptyCount > 0) {
+                    fen += emptyCount;
+                }
+                
+                if (row < 7) {
+                    fen += '/';
+                }
+            }
+            
+            // Add the rest of the FEN string (turn, castling rights, etc.)
+            fen += ' w KQkq - 0 1';
+            
+            return fen;
+        }
+
+        function makeMove(fromRow, fromCol, toRow, toCol) {
+            console.log('Making move:', { fromRow, fromCol, toRow, toCol, currentTurn });
+            
+            // Check if the move is valid
+            const isValidMove = validMoves.some(move => 
+                move.toRow === toRow && move.toCol === toCol
+            );
+            
+            if (!isValidMove) {
+                console.log('Invalid move');
+                return;
+            }
+            
+            // Make the move on the board
+            const piece = board[fromRow][fromCol];
+            board[toRow][toCol] = piece;
+            board[fromRow][fromCol] = null;
+            
+            // Add move to history
+            const moveNotation = `${getChessNotationSquare(fromRow, fromCol)}${getChessNotationSquare(toRow, toCol)}`;
+            moveHistory.push(moveNotation);
+            updateGameHistory();
+            
+            // Switch turn before sending to server
+            currentTurn = currentTurn === 'white' ? 'black' : 'white';
+            console.log('Turn switched to:', currentTurn);
+            
+            // Update the game state
+            const gameState = {
+                currentFEN: boardToFEN(),
+                currentTurn: currentTurn,
+                moveHistory: moveHistory
+            };
+            
+            // Update the database
+            fetch(`/game/${gameId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(gameState)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Server response:', data);
+                    // Update turn from server response to ensure sync
+                    if (data.currentTurn) {
+                        currentTurn = data.currentTurn;
+                        console.log('Turn updated from server:', currentTurn);
+                    }
+                    // Redraw the board
+                    initializeBoard();
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        // Initialize the board and game history when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeBoard();
+        });
+    </script>
+
     <style>
         .chess-board {
             width: 644px; /* Adjust board size here */
@@ -29,7 +355,7 @@
             grid-template-rows: repeat(8, 80px);   /* Adjust square size here */
             gap: 0;
         }
-
+        
         .chess-square {
             width: 80px; /* Adjust square size here */
             height: 80px; /* Adjust square size here */
@@ -38,6 +364,7 @@
             align-items: center;
             position: relative;
             z-index: 1; /* Ensure squares are above other elements */
+            cursor: pointer;
         }
 
         .chess-square.white {
@@ -47,18 +374,19 @@
         .chess-square.black {
             background-color: #b58863; /* Dark square color */
         }
-
+        
         .chess-square img {
             width: 80%; /* Adjust piece size relative to square */
             height: 80%; /* Adjust piece size relative to square */
             z-index: 10; /* Ensure pieces are above squares */
-            pointer-events: auto;
+            pointer-events: none;
+            cursor: grab;
         }
-
+        
         .chess-square.valid-move {
             position: relative; /* Ensure the pseudo-element is positioned relative to the square */
         }
-
+        
         .chess-square.valid-move::after {
             content: ''; /* Add an empty content for the pseudo-element */
             position: absolute;
@@ -71,6 +399,15 @@
             border-radius: 50%; /* Make it a circle */
             pointer-events: none; /* Ensure the circle doesn't block interactions */
             z-index: 20; /* Ensure the circle is above the square */
+        }
+
+        .chess-square img.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .chess-square.selected {
+            background-color: #7fc97f;
         }
 
         .list-group {
@@ -90,390 +427,4 @@
             background-color:rgba(141, 89, 212, 0.5); /* Light gray background */
         }
     </style>
-
-    <script>
-      
-        const board = document.getElementById('chessBoard');
-        let currentTurn = 'white'; // Track whose turn it is
-        let moveHistory = []; // Array to store the history of moves
-        let selectedPiece = null; // To store the selected piece
-        let selectedFromRow = null;
-        let selectedFromCol = null;
-
-        // Piece image URLs (using Wikipedia SVGs)
-        const pieces = {
-            white: {
-                king: "{% static 'chess/pieces/wK.svg' %}",
-                queen: "{% static 'chess/pieces/wQ.svg' %}",
-                rook: "{% static 'chess/pieces/wR.svg' %}",
-                bishop: "{% static 'chess/pieces/wB.svg' %}",
-                knight: "{% static 'chess/pieces/wN.svg' %}",
-                pawn: "{% static 'chess/pieces/wP.svg' %}"
-            },
-            black: {
-                king: "{% static 'chess/pieces/bK.svg' %}",
-                queen: "{% static 'chess/pieces/bQ.svg' %}",
-                rook: "{% static 'chess/pieces/bR.svg' %}",
-                bishop: "{% static 'chess/pieces/bB.svg' %}",
-                knight: "{% static 'chess/pieces/bN.svg' %}",
-                pawn: "{% static 'chess/pieces/bP.svg' %}"
-            }
-        };
-
-        // Create square
-        function createSquare(row, col) {
-            const square = document.createElement('div');
-            square.className = `chess-square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
-            square.dataset.row = row;
-            square.dataset.col = col;
-
-            square.addEventListener('dragover', e => e.preventDefault());
-
-            // Add click event to handle moving the selected piece
-            square.addEventListener('click', e => {
-                if (selectedPiece) {
-                    const toRow = parseInt(square.dataset.row);
-                    const toCol = parseInt(square.dataset.col);
-
-                    if (isValidMove(selectedFromRow, selectedFromCol, toRow, toCol)) {
-                        // Update boardState
-                        const piece = boardState[selectedFromRow][selectedFromCol];
-                        const targetPiece = boardState[toRow][toCol]; // Check if there's a piece at the target square
-
-                        // Record the move in chess notation
-                        let move;
-                        if (targetPiece) {
-                            // Capture move
-                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}x${getChessNotationSquare(toRow, toCol)}`;
-                        } else {
-                            // Regular move
-                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}${getChessNotationSquare(toRow, toCol)}`;
-                        }
-
-                        boardState[toRow][toCol] = piece; // Move the piece
-                        boardState[selectedFromRow][selectedFromCol] = null; // Clear the original square
-
-                        moveHistory.push(move);
-                        updateGameHistory();
-
-                        // Switch turn
-                        currentTurn = currentTurn === 'white' ? 'black' : 'white';
-
-                        // Redraw the board
-                        renderBoard();
-
-                        // Clear selection
-                        selectedPiece = null;
-                        selectedFromRow = null;
-                        selectedFromCol = null;
-                        clearHighlights();
-                    }
-                }
-            });
-
-            return square;
-        }
-
-        // Create piece
-        function createPiece(id, src, color, type, row, col) {
-            const img = document.createElement('img');
-            img.src = src;
-            img.id = id;
-            img.draggable = true;
-            img.dataset.color = color;
-            img.dataset.type = type;
-            img.dataset.row = row;
-            img.dataset.col = col;
-    
-            img.addEventListener('dragstart', e => {
-                const pieceColor = e.target.dataset.color;
-                if (pieceColor !== currentTurn) {
-                    e.preventDefault();
-                    return;
-                }
-    
-                const fromRow = parseInt(e.target.dataset.row);
-                const fromCol = parseInt(e.target.dataset.col);
-                const validMoves = getValidMoves(fromRow, fromCol, pieceColor, e.target.dataset.type);
-                highlightSquares(validMoves);
-                e.dataTransfer.setData('text/plain', e.target.id);
-            });
-
-            // Click event (same behavior as dragstart)
-            img.addEventListener('click', e => {
-                const pieceColor = e.target.dataset.color;
-                if (pieceColor !== currentTurn) {
-                    return;
-                }
-
-                const fromRow = parseInt(e.target.dataset.row);
-                const fromCol = parseInt(e.target.dataset.col);
-                const validMoves = getValidMoves(fromRow, fromCol, pieceColor, e.target.dataset.type);
-
-                // Highlight valid moves
-                highlightSquares(validMoves);
-
-                // Store the selected piece and its position
-                selectedPiece = e.target;
-                selectedFromRow = fromRow;
-                selectedFromCol = fromCol;
-            });
-    
-            img.addEventListener('dragend', e => {
-                console.log("dragend triggered");
-
-                // Get the square where the piece was dropped
-                let dropTarget = document.elementFromPoint(e.clientX, e.clientY);
-                // Traverse up the DOM tree to find the parent square
-                while (dropTarget && !dropTarget.classList.contains('chess-square')) {
-                    dropTarget = dropTarget.parentElement;
-                }
-
-                if (dropTarget && dropTarget.classList.contains('chess-square')) {
-                    const toRow = parseInt(dropTarget.dataset.row);
-                    const toCol = parseInt(dropTarget.dataset.col);
-            
-                    // Move the piece to the new square
-                    const fromRow = parseInt(e.target.dataset.row);
-                    const fromCol = parseInt(e.target.dataset.col);
-            
-                    if (isValidMove(fromRow, fromCol, toRow, toCol)) {
-                        // Update boardState
-                        const piece = boardState[fromRow][fromCol];
-                        const targetPiece = boardState[toRow][toCol]; // Check if there's a piece at the target square
-            
-                        // Record the move in chess notation
-                        let move;
-                        if (targetPiece) {
-                            // Capture move
-                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}x${getChessNotationSquare(toRow, toCol)}`;
-                        } else {
-                            // Regular move
-                            move = `${piece.type === 'pawn' ? '' : piece.type[0].toUpperCase()}${getChessNotationSquare(toRow, toCol)}`;
-                        }
-            
-                        boardState[toRow][toCol] = piece; // Move the piece
-                        boardState[fromRow][fromCol] = null; // Clear the original square
-                        console.log("toRow", toRow, "toCol", toCol, "piece", piece);
-                        moveHistory.push(move);
-                        updateGameHistory();
-            
-                        // Switch turn
-                        currentTurn = currentTurn === 'white' ? 'black' : 'white';
-            
-                        // Redraw the board
-                        renderBoard();
-                    }
-                }
-            
-                // Clear highlights
-                clearHighlights();
-            });
-    
-            return img;
-        }
-
-      
-        function highlightSquares(moves) {
-            moves.forEach(({ toRow, toCol }) => {
-                const square = getSquare(toRow, toCol);
-                square.classList.add('valid-move');
-            });
-        }
-    
-        function clearHighlights() {
-            document.querySelectorAll('.valid-move').forEach(sq => {
-                sq.classList.remove('valid-move');
-            });
-        }
-    
-        function getSquare(row, col) {
-            return board.children[row * 8 + col];
-        }
-    
-        function isValidMove(fromRow, fromCol, toRow, toCol) {
-            const validMoves = getValidMoves(parseInt(fromRow), parseInt(fromCol), currentTurn, boardState[fromRow][fromCol].type);
-            return validMoves.some(m => m.toRow == toRow && m.toCol == toCol);
-        }
-
-        const boardState = Array(8)
-        .fill(null)
-        .map(() => Array(8).fill(null));
-
-        // Setup initial chessboard
-        const initialSetup = {
-            0: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook'],
-            1: Array(8).fill('pawn'),
-            6: Array(8).fill('pawn'),
-            7: ['rook', 'knight', 'bishop', 'queen', 'king', 'bishop', 'knight', 'rook']
-        };
-
-        function initializeBoard() {
-            // Populate boardState with the initial setup
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    if (initialSetup[row]) {
-                        const pieceType = initialSetup[row][col];
-                        const color = row < 2 ? 'black' : 'white';
-                        boardState[row][col] = { type: pieceType, color: color };
-                    } else {
-                        boardState[row][col] = null;
-                    }
-                }
-            }
-
-            renderBoard(); // Draw the board
-        }
-
-        function getValidMoves(fromRow, fromCol, color, type) {
-            const moves = [];
-            const direction = color === 'white' ? -1 : 1;
-            const startRow = color === 'white' ? 6 : 1;
-        
-            const isInBounds = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-            
-            const getPieceAt = (r, c) => {
-                if (!isInBounds(r, c)) return null;
-                return boardState[r][c];
-            };
-        
-            const addMove = (r, c) => {
-                if (!isInBounds(r, c)) return;
-                const target = getPieceAt(r, c);
-                if (!target || target.color !== color) {
-                    moves.push({ toRow: r, toCol: c });
-                }
-            };
-            
-            if (type === 'pawn') {
-                const oneStep = fromRow + direction;
-                const twoStep = fromRow + 2 * direction;
-        
-                if (isInBounds(oneStep, fromCol) && !getPieceAt(oneStep, fromCol)) {
-                    moves.push({ toRow: oneStep, toCol: fromCol });
-        
-                    if (fromRow === startRow && !getPieceAt(twoStep, fromCol)) {
-                        moves.push({ toRow: twoStep, toCol: fromCol });
-                    }
-                }
-        
-                [-1, 1].forEach(deltaCol => {
-                    const r = fromRow + direction;
-                    const c = fromCol + deltaCol;
-                    const target = getPieceAt(r, c);
-                    if (target && target.color !== color) {
-                        moves.push({ toRow: r, toCol: c });
-                    }
-                });
-        
-            } else if (type === 'rook' || type === 'bishop' || type === 'queen') {
-                const directions = [];
-        
-                if (type === 'rook' || type === 'queen') {
-                    directions.push([1, 0], [-1, 0], [0, 1], [0, -1]);
-                }
-        
-                if (type === 'bishop' || type === 'queen') {
-                    directions.push([1, 1], [1, -1], [-1, 1], [-1, -1]);
-                }
-        
-                for (let [dr, dc] of directions) {
-                    let r = fromRow + dr;
-                    let c = fromCol + dc;
-                    while (isInBounds(r, c)) {
-                        const target = getPieceAt(r, c);
-                        if (!target) {
-                            moves.push({ toRow: r, toCol: c });
-                        } else {
-                            if (target.color !== color) {
-                                moves.push({ toRow: r, toCol: c });
-                            }
-                            break;
-                        }
-                        r += dr;
-                        c += dc;
-                    }
-                }
-        
-            } else if (type === 'knight') {
-                const deltas = [
-                    [2, 1], [2, -1], [-2, 1], [-2, -1],
-                    [1, 2], [1, -2], [-1, 2], [-1, -2],
-                ];
-                deltas.forEach(([dr, dc]) => {
-                    const r = fromRow + dr;
-                    const c = fromCol + dc;
-                    addMove(r, c);
-                });
-        
-            } else if (type === 'king') {
-                const deltas = [
-                    [1, 0], [-1, 0], [0, 1], [0, -1],
-                    [1, 1], [1, -1], [-1, 1], [-1, -1],
-                ];
-                deltas.forEach(([dr, dc]) => {
-                    const r = fromRow + dr;
-                    const c = fromCol + dc;
-                    addMove(r, c);
-                });
-            }
-        
-            return moves;
-        }
-
-        function renderBoard() {
-            board.innerHTML = ''; // Clear the board
-        
-            for (let row = 0; row < 8; row++) {
-                for (let col = 0; col < 8; col++) {
-                    const square = createSquare(row, col);
-                    board.appendChild(square);
-        
-                    const piece = boardState[row][col];
-                    if (piece) {
-                        const img = createPiece(
-                            `${piece.type}-${piece.color}-${row}-${col}`,
-                            pieces[piece.color][piece.type],
-                            piece.color,
-                            piece.type,
-                            row,
-                            col
-                        );
-                        square.appendChild(img);
-                    }
-                }
-            }
-        }
-        
-        function updateGameHistory() {
-            const gameHistoryElement = document.getElementById('gameHistory');
-            gameHistoryElement.innerHTML = ''; // Clear the current history
-        
-            moveHistory.forEach((move, index) => {
-                const listItem = document.createElement('li');
-                listItem.className = `list-group-item ${index % 2 === 0 ? 'bg-white' : 'bg-light'}`; // Alternate row colors
-                listItem.textContent = `${index + 1}. ${move}`;
-                gameHistoryElement.appendChild(listItem);
-            });
-        }
-
-        function getChessNotation(type, fromRow, fromCol, toRow, toCol) {
-            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-            const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
-        
-            const pieceNotation = type === 'pawn' ? '' : type[0].toUpperCase(); // Use uppercase for pieces, no notation for pawns
-            const fromSquare = `${files[fromCol]}${ranks[fromRow]}`;
-            const toSquare = `${files[toCol]}${ranks[toRow]}`;
-        
-            return `${pieceNotation}${toSquare}`; // Example: Nf6, e4
-        }
-
-        function getChessNotationSquare(row, col) {
-            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-            const ranks = [8, 7, 6, 5, 4, 3, 2, 1];
-            return `${files[col]}${ranks[row]}`;
-        }
-
-        document.addEventListener('DOMContentLoaded', initializeBoard);
-    </script>
 {% endblock %}
