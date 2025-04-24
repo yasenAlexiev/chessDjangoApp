@@ -333,8 +333,43 @@
             return `${files[col]}${ranks[row]}`;
         }
 
+        function isKingInCheck(isWhite) {
+            // Find the king's position
+            let kingRow = -1;
+            let kingCol = -1;
+            const kingPiece = isWhite ? 'wK' : 'bK';
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (board[row][col] === kingPiece) {
+                        kingRow = row;
+                        kingCol = col;
+                        break;
+                    }
+                }
+                if (kingRow !== -1) break;
+            }
+            
+            // Check if any opponent piece can capture the king
+            const opponentPieces = isWhite ? ['bP', 'bN', 'bB', 'bR', 'bQ'] : ['wP', 'wN', 'wB', 'wR', 'wQ'];
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece && opponentPieces.includes(piece)) {
+                        const moves = getValidMoves(row, col);
+                        if (moves.some(move => move.toRow === kingRow && move.toCol === kingCol)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
         function getChessNotation(fromRow, fromCol, toRow, toCol) {
-            const piece = board[toRow][toCol];
+            const piece = board[fromRow][fromCol];
             if (!piece) {
                 console.error('No piece found at', { fromRow, fromCol });
                 return '';
@@ -346,9 +381,20 @@
             // Check if there's a piece at the destination (capture)
             const isCapture = board[toRow][toCol] !== null;
             
+            // Make a temporary move to check if it results in check
+            const tempPiece = board[toRow][toCol];
+            board[toRow][toCol] = piece;
+            board[fromRow][fromCol] = null;
+            
+            const isCheck = isKingInCheck(piece[0] === 'w' ? false : true);
+            
+            // Undo the temporary move
+            board[fromRow][fromCol] = piece;
+            board[toRow][toCol] = tempPiece;
+            
             // For pawns, just show the destination square
             if (pieceType === 'p') {
-                return isCapture ? `${getChessNotationSquare(fromRow, fromCol)[0]}x${toSquare}` : toSquare;
+                return `${isCapture ? getChessNotationSquare(fromRow, fromCol)[0] + 'x' : ''}${toSquare}${isCheck ? '+' : ''}`;
             }
             
             // For other pieces, show the piece symbol and destination square
@@ -360,7 +406,7 @@
                 'n': 'N'
             };
             
-            return `${pieceSymbols[pieceType]}${isCapture ? 'x' : ''}${toSquare}`;
+            return `${pieceSymbols[pieceType]}${isCapture ? 'x' : ''}${toSquare}${isCheck ? '+' : ''}`;
         }
 
         function boardToFEN() {
@@ -413,15 +459,16 @@
                 return;
             }
             
+            // Add move to history with proper chess notation
+            const moveNotation = getChessNotation(fromRow, fromCol, toRow, toCol);
+            moveHistory.push(moveNotation);
+            updateGameHistory();
+            
             // Make the move on the board
             const piece = board[fromRow][fromCol];
             board[toRow][toCol] = piece;
             board[fromRow][fromCol] = null;
             
-            // Add move to history with proper chess notation
-            const moveNotation = getChessNotation(fromRow, fromCol, toRow, toCol);
-            moveHistory.push(moveNotation);
-            updateGameHistory();
             
             // Switch turn before sending to server
             currentTurn = currentTurn === 'white' ? 'black' : 'white';
