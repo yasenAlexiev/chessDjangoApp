@@ -343,9 +343,12 @@
             const pieceType = piece[1].toLowerCase();
             const toSquare = getChessNotationSquare(toRow, toCol);
             
+            // Check if there's a piece at the destination (capture)
+            const isCapture = board[toRow][toCol] !== null;
+            
             // For pawns, just show the destination square
             if (pieceType === 'p') {
-                return toSquare;
+                return isCapture ? `${getChessNotationSquare(fromRow, fromCol)[0]}x${toSquare}` : toSquare;
             }
             
             // For other pieces, show the piece symbol and destination square
@@ -357,7 +360,7 @@
                 'n': 'N'
             };
             
-            return `${pieceSymbols[pieceType]}${toSquare}`;
+            return `${pieceSymbols[pieceType]}${isCapture ? 'x' : ''}${toSquare}`;
         }
 
         function boardToFEN() {
