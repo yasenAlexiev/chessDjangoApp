@@ -212,9 +212,93 @@
                         }
                     });
                     break;
-                    
-                // Add more piece movement patterns here
-                // For now, we'll just implement pawn and knight moves
+
+                case 'r': // Rook
+                    // Horizontal and vertical moves
+                    const rookDirections = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+                    rookDirections.forEach(([dRow, dCol]) => {
+                        let toRow = fromRow + dRow;
+                        let toCol = fromCol + dCol;
+                        while (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece) {
+                                moves.push({ toRow, toCol });
+                            } else {
+                                if (targetPiece[0] !== piece[0]) {
+                                    moves.push({ toRow, toCol });
+                                }
+                                break;
+                            }
+                            toRow += dRow;
+                            toCol += dCol;
+                        }
+                    });
+                    break;
+
+                case 'b': // Bishop
+                    // Diagonal moves
+                    const bishopDirections = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+                    bishopDirections.forEach(([dRow, dCol]) => {
+                        let toRow = fromRow + dRow;
+                        let toCol = fromCol + dCol;
+                        while (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece) {
+                                moves.push({ toRow, toCol });
+                            } else {
+                                if (targetPiece[0] !== piece[0]) {
+                                    moves.push({ toRow, toCol });
+                                }
+                                break;
+                            }
+                            toRow += dRow;
+                            toCol += dCol;
+                        }
+                    });
+                    break;
+
+                case 'q': // Queen
+                    // Combines rook and bishop moves
+                    const queenDirections = [
+                        [0, 1], [0, -1], [1, 0], [-1, 0], // Rook moves
+                        [1, 1], [1, -1], [-1, 1], [-1, -1] // Bishop moves
+                    ];
+                    queenDirections.forEach(([dRow, dCol]) => {
+                        let toRow = fromRow + dRow;
+                        let toCol = fromCol + dCol;
+                        while (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece) {
+                                moves.push({ toRow, toCol });
+                            } else {
+                                if (targetPiece[0] !== piece[0]) {
+                                    moves.push({ toRow, toCol });
+                                }
+                                break;
+                            }
+                            toRow += dRow;
+                            toCol += dCol;
+                        }
+                    });
+                    break;
+
+                case 'k': // King
+                    // One square in any direction
+                    const kingDirections = [
+                        [0, 1], [0, -1], [1, 0], [-1, 0],
+                        [1, 1], [1, -1], [-1, 1], [-1, -1]
+                    ];
+                    kingDirections.forEach(([dRow, dCol]) => {
+                        const toRow = fromRow + dRow;
+                        const toCol = fromCol + dCol;
+                        if (isValidSquare(toRow, toCol)) {
+                            const targetPiece = board[toRow][toCol];
+                            if (!targetPiece || targetPiece[0] !== piece[0]) {
+                                moves.push({ toRow, toCol });
+                            }
+                        }
+                    });
+                    break;
             }
             
             return moves;
